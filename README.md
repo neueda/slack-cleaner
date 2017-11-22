@@ -1,5 +1,7 @@
 # Slack Cleaner
 
+Old files belong in the trash. :wastebasket:
+
 Use this to truncate Slack storage when your workspace is over its storage limit.
 
 1. Create a token file:
