@@ -1,6 +1,6 @@
 const axios = require('axios');
 const {stringify: qs} = require('querystring');
-const {getTime, subYears} = require('date-fns');
+const {getTime, subMonths} = require('date-fns');
 const {token} = require('./token');
 
 const client = axios.create({
@@ -10,42 +10,46 @@ const client = axios.create({
     }
 });
 
-// Change this to change starting time
-function fromTime() {
-    return subYears(new Date(), 1);
-}
+async function listFiles(params = {}, filter = () => true, page = 1) {
+    const {data} = await client.post('files.list', qs(Object.assign({page}, params)));
 
-// Change this to prevent deletion of certain files
-function fileFilter(file) {
-    return true;
-}
-
-function dateToSec(date) {
-    const ms = getTime(date);
-    return Math.floor(ms / 1000);
-}
-
-async function fetchFileIds(from, page = 1) {
-    const {data} = await client.post(
-        'files.list',
-        qs({
-            ts_to: dateToSec(from),
-            page
-        })
-    );
+    if (data.files.length === 0) {
+        return [];
+    }
 
     const pages = data.paging.pages;
     console.log(`Fetched page ${page} of ${pages}`);
 
     const ids = data.files
-        .filter(fileFilter)
+        .filter(filter)
         .map(({id}) => id);
 
     if (page < pages) {
-        const nextIds = await fetchFileIds(from, page + 1);
+        const nextIds = await listFiles(params, filter, page + 1);
         return ids.concat(nextIds);
     }
     return ids;
+}
+
+async function deleteOldFiles(from) {
+    console.log(`Searching for files older than ${from}`);
+    const timestamp = Math.floor(getTime(from) / 1000);
+    const files = await listFiles({ts_to: timestamp});
+    if (files.length > 0) {
+        await deleteFiles(files);
+    } else {
+        console.log('No files found');
+    }
+}
+
+async function deleteLargeFiles(maxSize) {
+    console.log(`Searching for files larger than ${maxSize} bytes`);
+    const files = await listFiles({}, ({size}) => size > maxSize);
+    if (files.length > 0) {
+        await deleteFiles(files);
+    } else {
+        console.log('No files found');
+    }
 }
 
 async function deleteFiles(ids) {
@@ -66,11 +70,11 @@ async function deleteFiles(ids) {
 }
 
 async function run() {
-    const from = fromTime();
-    console.log(`Fetching records older than ${from}`);
-    const idsToDelete = await fetchFileIds(from);
-    await deleteFiles(idsToDelete);
-    console.log('Done');
+    const from = subMonths(new Date(), 3); // 3 months ago
+    await deleteOldFiles(from);
+
+    const maxSize = 5 * 1024 * 1024; // 5 megabytes
+    await deleteLargeFiles(maxSize);
 }
 
 run();
