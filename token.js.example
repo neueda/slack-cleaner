@@ -1,4 +1,0 @@
-// https://api.slack.com/custom-integrations/legacy-tokens
-module.exports = {
-    token: "xoxp-..."
-};
